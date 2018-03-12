@@ -1,0 +1,40 @@
+﻿<Window x:Class="KanjiKbd.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:KanjiKbd"
+        mc:Ignorable="d"
+        Title="プチコンBIG用漢字キーボードクライアント" Height="157.48" Width="1462.058" PreviewKeyDown="Window_PreviewKeyDown" Icon="mnt_icon.png">
+    <Grid> 
+        <Grid.RowDefinitions>
+            <RowDefinition Height="auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0">
+            <Menu VerticalAlignment="Top">
+                <MenuItem Header="ファイル(_F)" >
+                    <MenuItem Name="menuitemOpen" Header="開く(_O)"
+                              Command="ApplicationCommands.Open" />
+                    <Separator />
+                    <MenuItem Name="menuitemExit" Header="終了(_X)"
+                              Click="menuitemExit_Click" InputGestureText="Ctrl+X" />
+                </MenuItem>
+                <MenuItem Header="編集(_E)" >
+                    <MenuItem Name="menuitemCut" Header="切り取り(_X)"
+                              Command="ApplicationCommands.Cut" />
+                    <MenuItem Name="menuitemCopy" Header="コピー(_C)"
+                              Command="ApplicationCommands.Copy" />
+                    <MenuItem Name="menuitemPaste" Header="貼り付け(_V)"
+                              Command="ApplicationCommands.Paste"/>
+                </MenuItem>
+                <MenuItem x:Name="COM" Header="COM(_C)">
+                </MenuItem>
+            </Menu>
+        </Grid>
+        <Grid Grid.Row="1">
+            <TextBox x:Name="TB" TextWrapping="Wrap" FontFamily="MS Gothic" FontSize="72" TextChanged="TB_TextChanged"  />
+        </Grid>
+
+    </Grid>
+</Window>
