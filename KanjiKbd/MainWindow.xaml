@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:KanjiKbd"
         mc:Ignorable="d"
-        Title="プチコンBIG用漢字キーボードクライアント" Height="157.48" Width="1462.058" PreviewKeyDown="Window_PreviewKeyDown" Icon="mnt_icon.png">
+        Title="プチコンBIG用漢字キーボードクライアント" Height="138.415" Width="1462.058" PreviewKeyDown="Window_PreviewKeyDown" Icon="mnt_icon.png">
     <Grid> 
         <Grid.RowDefinitions>
             <RowDefinition Height="auto"/>
@@ -13,22 +13,18 @@
         </Grid.RowDefinitions>
         <Grid Grid.Row="0">
             <Menu VerticalAlignment="Top">
-                <MenuItem Header="ファイル(_F)" >
-                    <MenuItem Name="menuitemOpen" Header="開く(_O)"
+                <MenuItem Header="ファイル" >
+                    <MenuItem Name="menuitemOpen" Header="開く"
                               Command="ApplicationCommands.Open" />
                     <Separator />
-                    <MenuItem Name="menuitemExit" Header="終了(_X)"
+                    <MenuItem Name="menuitemExit" Header="終了"
                               Click="menuitemExit_Click" InputGestureText="Ctrl+X" />
                 </MenuItem>
-                <MenuItem Header="編集(_E)" >
-                    <MenuItem Name="menuitemCut" Header="切り取り(_X)"
-                              Command="ApplicationCommands.Cut" />
-                    <MenuItem Name="menuitemCopy" Header="コピー(_C)"
-                              Command="ApplicationCommands.Copy" />
-                    <MenuItem Name="menuitemPaste" Header="貼り付け(_V)"
+                <MenuItem Header="編集" >
+                    <MenuItem Name="menuitemPaste" Header="貼り付け"
                               Command="ApplicationCommands.Paste"/>
                 </MenuItem>
-                <MenuItem x:Name="COM" Header="COM(_C)">
+                <MenuItem x:Name="COM" Header="COM">
                 </MenuItem>
             </Menu>
         </Grid>

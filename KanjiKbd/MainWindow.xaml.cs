@@ -23,10 +23,7 @@ namespace KanjiKbd {
     public partial class MainWindow : Window {
         private SerialPort myPort;
         private byte[] buf = new byte[1024];
-        private readonly byte XOFF = 0x13; // Ctrl+S
-        private readonly byte XON = 0x11; // Ctrl+Q
-        private Boolean flowStop = false;
-
+        
         /// <summary>
         /// IMEで変換中かのフラグ
         /// </summary>
@@ -65,7 +62,7 @@ namespace KanjiKbd {
                 Task.Run(() => sendKanji(kanji));
             }
             TB.Clear();
-            Console.WriteLine(kanji);
+            //Console.WriteLine(kanji);
         }
 
         private void OnPreviewTextInput(object sender, TextCompositionEventArgs e) {
@@ -81,13 +78,15 @@ namespace KanjiKbd {
                 _imeFlag = false;
         }
 
+        /// <summary>
+        /// COMポートの選択
+        /// </summary>
         private void Com_Click(object sender, RoutedEventArgs e) {
-            MenuItem menuitem = (MenuItem)sender; // オブジェクトをMenuItemクラスのインスタンスにキャストする。
-            string header = menuitem.Header.ToString(); // Headerプロパティを取り出して、文字列に変換する。
-            string tag = menuitem.Tag.ToString(); // Tagプロパティを取り出して、文字列に変換する。
-            Console.Out.WriteLine(String.Format("{0},{1}", header, tag));
-            COM.Header = String.Format("{0}(_C)", header);
+            MenuItem menuitem = (MenuItem)sender;
+            string header = menuitem.Header.ToString();
+            COM.Header = String.Format("{0}", header); // COMメニューの文字列を更新
             openPort(header);
+            //Console.Out.WriteLine(String.Format("COM=[{0}]", header));
         }
 
         /// <summary>
@@ -154,11 +153,15 @@ namespace KanjiKbd {
         /// 漢字を送信する
         /// </summary>
         private void sendKanji(string kanji) {
+            int len = kanji.Length;
+            if (len<=0) {
+                return;
+            }
+
             // F11を送信してスマイルツールを起動
             sendKey(0, KeyCode.getCode(Key.F11));
             //Console.Out.WriteLine(String.Format("Send F11[{0}]",kanji));
             Thread.Sleep(50);
-            int wait = 0;
 
             foreach (char ch in kanji) {
                 UInt16 c = Convert.ToUInt16(ch);
@@ -169,15 +172,14 @@ namespace KanjiKbd {
                     string s = Convert.ToString((c>>12) & 0xf, 16);
                     UInt16 fig = Convert.ToUInt16(s[0]);
                     sendKey(0, (byte)KeyCode.asciiToScanCode[fig - 0x20]);
-                    Thread.Sleep(1);
                     c <<= 4;
                 }
-                wait += 30;
+                Thread.Sleep(5);
             }
 
             // 最後に、終了を示すスペースを送信。この時点でスマイルツールが終了する。
             sendKey(0, KeyCode.getCode(Key.Space));
-            Thread.Sleep(100+wait);
+            Thread.Sleep(100+(len-1)*30);
 
             // Ctrl+Vを送信して貼り付け
             sendKey(KeyCode.MOD_LCTRL, KeyCode.getCode(Key.V));
@@ -218,6 +220,9 @@ namespace KanjiKbd {
             }
         }
 
+        /// <summary>
+        /// 終了
+        /// </summary>
         private void menuitemExit_Click(object sender, RoutedEventArgs e) {
             this.Close();
         }
