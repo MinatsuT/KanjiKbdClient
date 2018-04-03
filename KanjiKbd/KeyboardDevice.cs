@@ -61,8 +61,23 @@ namespace KanjiKbd {
         private SerialPort myPort = null;
         private TcpClient myClient = null;
 
-        private byte[] buf = new byte[1024];
+        private readonly byte XOFF = 0x13; //Ctrl+S
+        private readonly byte XON = 0x11; //Ctrl+Q
+        private bool COMSendEnable = true;
 
+        /// <summary>
+        /// COMポートからの受信バッファ
+        /// </summary>
+        private string COMbuf = "";
+
+        /// <summary>
+        /// HIDレポートパケット
+        /// </summary>
+        private byte[] pkt = new byte[8];
+
+        /// <summary>
+        /// ファイル送信中フラグ
+        /// </summary>
         public bool FileSending { get; internal set; } = false;
 
         /// <summary>
@@ -180,16 +195,43 @@ namespace KanjiKbd {
             myPort.Open();
             myPort.DataReceived += new SerialDataReceivedEventHandler(ReceiveCOMPort);
             OnKeyboardDeviceConnected(new KeyboardDeviceEventArgs(kdi.FriendlyName));
+
+            COMSendEnable = true;
             Console.Out.WriteLine(String.Format("Open [{0}].", kdi.DeviceName));
         }
 
         /// <summary>
         /// COMポートからの受信
         /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void ReceiveCOMPort(object sender, System.IO.Ports.SerialDataReceivedEventArgs e) {
-            string dat = myPort.ReadExisting();
-            Console.Out.WriteLine(String.Format("COM received:[{0}]", dat));
+            string s = "";
+            foreach (char c in myPort.ReadExisting()) {
+                if (c == XOFF) {
+                    COMSendEnable = false;
+                    //Console.WriteLine("XOFF");
+                } else if (c == XON) {
+                    COMSendEnable = true;
+                    //Console.WriteLine("XON");
+                } else {
+                    s += c;
+                }
+            }
+
+            COMbuf += s;
+            var delCount = 0;
+            var len = COMbuf.Length;
+            if (len > 0 && COMbuf[len - 1] == '\n') {
+                delCount++;
+                if (len > 1 && COMbuf[len - 2] == '\r') {
+                    delCount++;
+                }
+                Console.Out.WriteLine(String.Format("COM received:[{0}]", COMbuf.Remove(len - delCount)));
+                COMbuf = "";
+            }
         }
+
 
         /// <summary>
         /// キーボードサーバを探す  
@@ -329,39 +371,44 @@ namespace KanjiKbd {
             }
         }
 
-
         /// <summary>
         /// ファイル送信中でなければ、charを指定してキーを送信する。
         /// </summary>
         /// <param name="c"></param>
-        public async Task SendAsync(char c) {
-            if (!FileSending) await _SendAsync(c);
+        /// <param name="delay"></param>
+        /// <returns></returns>
+        public async Task SendAsync(char c, int delay = 0) {
+            if (!FileSending) await _SendAsync(c, delay);
         }
 
         /// <summary>
         /// charを指定してキーを送信する。（内部用）
         /// </summary>
         /// <param name="c"></param>
+        /// <param name="delay"></param>
         /// <returns></returns>
-        private async Task _SendAsync(char c) {
-            await _SendAsync(KeyCode.CharToCode(c));
+        private async Task _SendAsync(char c, int delay = 0) {
+            await _SendAsync(KeyCode.CharToCode(c), delay);
         }
 
         /// <summary>
         /// ファイル送信中でなければ、Keyを指定してキーを送信する。
         /// </summary>
         /// <param name="k"></param>
-        public async Task SendAsync(Key k) {
-            if (!FileSending) await _SendAsync(k);
+        /// <param name="delay"></param>
+        /// <returns></returns>
+        public async Task SendAsync(Key k, int delay = 0) {
+            if (!FileSending) await _SendAsync(k, delay);
         }
 
         /// <summary>
         /// Keyを指定してキーを送信する。（内部用）
         /// </summary>
         /// <param name="k"></param>
+        /// <param name="delay"></param>
         /// <returns></returns>
-        private async Task _SendAsync(Key k) {
-            await _SendAsync(KeyCode.KeyToCode(k));
+        private async Task _SendAsync(Key k, int delay = 0) {
+            await _SendAsync(KeyCode.KeyToCode(k), delay);
         }
 
         /// <summary>
@@ -369,8 +416,10 @@ namespace KanjiKbd {
         /// 0x100以上のスキャンコードはシフトキーを押している状態とみなす。
         /// </summary>
         /// <param name="exCode"></param>
-        public async Task SendAsync(int exCode) {
-            if (!FileSending) await _SendAsync(exCode);
+        /// <param name="delay"></param>
+        /// <returns></returns>
+        public async Task SendAsync(int exCode, int delay = 0) {
+            if (!FileSending) await _SendAsync(exCode, delay);
         }
 
         /// <summary>
@@ -378,11 +427,12 @@ namespace KanjiKbd {
         /// 0x100以上のスキャンコードはシフトキーを押している状態とみなす。（内部用）
         /// </summary>
         /// <param name="exCode"></param>
+        /// <param name="delay"></param>
         /// <returns></returns>
-        private async Task _SendAsync(int exCode) {
+        private async Task _SendAsync(int exCode, int delay = 0) {
             byte mod = (exCode & 0x100) == 0 ? (byte)0 : KeyCode.MOD_LSHIFT;
             byte code = (byte)(exCode & 0xff);
-            await _SendAsync(mod, code);
+            await _SendAsync(mod, code, delay);
         }
 
         /// <summary>
@@ -390,9 +440,10 @@ namespace KanjiKbd {
         /// </summary>
         /// <param name="mod"></param>
         /// <param name="code"></param>
+        /// <param name="delay"></param>
         /// <returns></returns>
-        public async Task SendAsync(byte mod, byte code) {
-            if (!FileSending) await _SendAsync(mod, code);
+        public async Task SendAsync(byte mod, byte code, int delay = 0) {
+            if (!FileSending) await _SendAsync(mod, code, delay);
         }
 
         /// <summary>
@@ -400,31 +451,83 @@ namespace KanjiKbd {
         /// </summary>
         /// <param name="mod"></param>
         /// <param name="code"></param>
+        /// <param name="delay"></param>
         /// <returns></returns>
-        private async Task _SendAsync(byte mod, byte code) {
-            buf[0] = 0;
-            buf[1] = mod;
-            buf[2] = code;
-            SendPkt(3);
-            await Task.Delay(waitPerPkt);
+        private async Task _SendAsync(byte mod, byte code, int delay = 0) {
+            pkt[0] = 0x00; // raw packet indicator
+            pkt[1] = mod;
+            pkt[2] = code;
+            await SendPktAsync(1 + 2);
 
-            buf[2] = 0;
-            SendPkt(3);
-            //await Task.Delay(waitPerPkt);
+            await Task.Delay(delay);
+
+            pkt[2] = 0;
+            await SendPktAsync(1 + 2);
+        }
+
+
+        /// <summary>
+        /// ファイル送信中でなければ、複数コードをまとめて送信。
+        /// </summary>
+        /// <param name="mod"></param>
+        /// <param name="codes"></param>
+        /// <returns></returns>
+        public async Task SendCodesAsync(byte mod, byte[] codes,int delay=0) {
+            if (!FileSending) await _SendCodesAsync(mod, codes,delay);
+        }
+
+        /// <summary>
+        /// 複数コードをまとめて送信。（内部用）
+        /// </summary>
+        /// <param name="mod"></param>
+        /// <param name="codes"></param>
+        /// <returns></returns>
+        private async Task _SendCodesAsync(byte mod, byte[] codes,int delay=0) {
+            pkt[0] = mod;
+            int len = codes.Length;
+            for (int i=0;i<6;i++) {
+                byte b = 0;
+                if (i<len) {
+                    b = codes[i];
+                }
+                pkt[1 + i] = b;
+            }
+            await SendStreamPktAsync(delay);
+        }
+
+        /// <summary>
+        /// ストリームパケット(mod+code*6)を送信する。
+        /// </summary>
+        /// <returns></returns>
+        private async Task SendStreamPktAsync(int delay=0) {
+            pkt[0] = 0xff; // stream packet indicator
+            await SendPktAsync(1 + 6);
+            for (int i = 0; i < 6; i++) {
+                pkt[1 + i] = 0;
+            }
+            if (delay>0) {
+                await Task.Delay(delay);
+            }
+            await SendPktAsync(1 + 6);
         }
 
         /// <summary>
         /// サイズを指定して送信
         /// </summary>
         /// <param name="size"></param>
-        public void SendPkt(int size) {
+        public async Task SendPktAsync(int size) {
             // COMポートへ送信
-            myPort?.Write(buf, 0, size);
+            if (myPort != null) {
+                while (!COMSendEnable) {
+                    await Task.Delay(1);
+                }
+                myPort?.Write(pkt, 0, size);
+            }
 
             // キーボードサーバへ送信
             if (myClient != null) {
                 NetworkStream stream = myClient.GetStream();
-                stream.Write(buf, 0, size);
+                stream.Write(pkt, 0, size);
                 stream.Flush();
             }
         }
@@ -485,11 +588,8 @@ namespace KanjiKbd {
         /// </summary>
         /// <param name="bitSize"></param>
         private async Task SendBitsAsync(int bitSize) {
-            buf[0] = 0xff; // raw packet
             bs.Seek(0, 0);
-            int delay = 10;
 
-            string s = "";
             for (int bitCount = 0; bitCount < bitSize;) {
                 for (int i = 0; i < 6; i++) {
                     byte b = 0;
@@ -498,32 +598,15 @@ namespace KanjiKbd {
                         bitCount += 5;
                     }
                     int pos = FindUsableToken(b);
-                    //s += string.Format("{0}({1})=[{2}]", b, pos, tokens[pos]);
-                    s += tokens[pos];
-                    buf[1 + i] = (byte)KeyCode.CharToCode(tokens[pos]);
+                    pkt[1 + i] = (byte)KeyCode.CharToCode(tokens[pos]);
                     PushUsed(pos);
                 }
-                SendPkt(1 + 6);
-                for (int i = 0; i < 6; i++) buf[1 + i] = 0;
-                SendPkt(1 + 6);
-                SendPkt(1 + 6);
-                SendPkt(1 + 6);
-                //SendPkt(1 + 6);
-                //await Task.Delay(delay);
+                await SendStreamPktAsync();
             }
-            Console.WriteLine("tokens=[{0}]", s);
 
             // 改行送信
-            for (int i = 0; i < 6; i++) buf[1 + i] = 0;
-            buf[1 + 0] = KeyCode.KEY_ENTER;
-            SendPkt(1 + 6);
-            for (int i = 0; i < 6; i++) buf[1 + i] = 0;
-            SendPkt(1 + 6);
-            SendPkt(1 + 6);
-            SendPkt(1 + 6);
-            //Thread.Sleep(delay);
-            //SendPkt(1 + 6);
-            //await Task.Delay(100);
+            pkt[1] = KeyCode.KEY_ENTER;
+            await SendStreamPktAsync();
         }
 
         // LCM(5bit*6,8bit) = (2*15bit, 2*4bit) = 2*4*15bit = 8*15bit = 15byte
@@ -533,6 +616,11 @@ namespace KanjiKbd {
         private BitStream bs;
         public static int waitPerPkt { get; set; } = 20;
 
+        /// <summary>
+        /// 指定されたファイルを送信する。
+        /// </summary>
+        /// <param name="fname"></param>
+        /// <returns></returns>
         public async Task<long> SendFileAsync(string fname) {
             FileSending = true;
             BinaryReader br = null;
@@ -549,6 +637,7 @@ namespace KanjiKbd {
                 // ファイル名を送信
                 string sendFname = "";
                 foreach (char c in Path.GetFileName(fname)) {
+                    // 多バイトコードは含めない
                     if (c < 0x7f) {
                         sendFname += c;
                     }

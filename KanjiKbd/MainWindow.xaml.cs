@@ -114,7 +114,7 @@ namespace KanjiKbd {
                 if ((modKey & ModifierKeys.Windows) != ModifierKeys.None) {
                     mod |= KeyCode.MOD_LWINDOWS;
                 }
-                Task t = kbd.SendAsync(mod, code);
+                Task t = kbd.SendAsync(mod, code, 20);
                 e.Handled = true;
             }
         }
@@ -147,6 +147,8 @@ namespace KanjiKbd {
         /// </summary>
         private async Task SendKanjiAsync(string kanji) {
             int len = kanji.Length;
+
+            // 空文字なら何もしない
             if (len <= 0) {
                 return;
             }
@@ -155,22 +157,30 @@ namespace KanjiKbd {
             await kbd.SendAsync(Key.F11);
             await Task.Delay(50);
 
+            byte[] codes = new byte[4];
+
             foreach (char ch in kanji) {
                 UInt16 c = Convert.ToUInt16(ch);
+                if (c == 0x0d) {
+                    // CRは送信しない
+                    continue;
+                }
 
                 // UTF16コードを、上位から1ニブルずつ16進数の文字(0～F)に変換して送信
                 for (int i = 0; i < 4; i++) {
                     string s = Convert.ToString((c >> 12) & 0xf, 16);
-                    await kbd.SendAsync(s[0]);
+                    codes[i] = (byte)KeyCode.CharToCode(s[0]);
                     c <<= 4;
                 }
-                await Task.Delay(5);
+                await kbd.SendCodesAsync(0,codes,1);
             }
 
             // 最後に、終了を示すスペースを送信。この時点でスマイルツールが終了する。
             await kbd.SendAsync(Key.Space);
-            //await Task.Delay(100 + (len - 1) * 30);
-            await Task.Delay(200 + (len - 1) * 100);
+
+            // スマイルツールが終了するのを待つ。
+            //await Task.Delay(200 + (len - 1) * 100);
+            await Task.Delay(100);
 
             // Ctrl+Vを送信して貼り付け
             await kbd.SendAsync(KeyCode.MOD_LCTRL, (byte)KeyCode.KeyToCode(Key.V));
@@ -219,6 +229,17 @@ namespace KanjiKbd {
                 e.Effects = DragDropEffects.None;
             }
             e.Handled = true;
+        }
+
+        /// <summary>
+        /// クリップボードから貼り付け
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private async void menuitemPaste_Click(object sender, RoutedEventArgs e) {
+            TB.IsEnabled = false;
+            await SendKanjiAsync(Clipboard.GetText());
+            TB.IsEnabled = true;
         }
     }
 }
