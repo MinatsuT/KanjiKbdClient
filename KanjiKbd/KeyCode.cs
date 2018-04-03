@@ -16,7 +16,9 @@ namespace KanjiKbd {
         public static readonly byte MOD_RALT = 1 << 6;
         public static readonly byte MOD_RWINDOWS = 1 << 7;
 
-        public static readonly int[] asciiToScanCode = {
+        public static readonly byte KEY_ENTER = 0x28;
+
+        private static readonly int[] asciiToScanCode = {
             //  0      1      2      3      4      5      6      7      8      9      A      B      C      D      E      F
             0x02C, 0x11E, 0x11F, 0x120, 0x121, 0x122, 0x123, 0x124, 0x125, 0x126, 0x134, 0x133, 0x036, 0x02d, 0x037, 0x038, //0x20-0x2F
             0x027, 0x01E, 0x01F, 0x020, 0x021, 0x022, 0x023, 0x024, 0x025, 0x026, 0x034, 0x033, 0x136, 0x12d, 0x137, 0x138, //0x30-0x3F
@@ -27,7 +29,11 @@ namespace KanjiKbd {
 
         public static readonly byte[] keyToScanCode = new byte[256];
 
-        public static byte getCode(Key k) {
+        public static int CharToCode(char c) {
+            return KeyCode.asciiToScanCode[Convert.ToUInt16(c) - 0x20];
+        }
+
+        public static int KeyToCode(Key k) {
             return keyToScanCode[(int)k];
         }
 

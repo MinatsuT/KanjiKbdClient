@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:KanjiKbd"
         mc:Ignorable="d"
-        Title="プチコンBIG用漢字キーボードクライアント" Height="138.415" Width="1462.058" PreviewKeyDown="Window_PreviewKeyDown" Icon="mnt_icon.png">
+        Title="プチコンBIG用漢字キーボードクライアント" Height="138.415" Width="1462.058" PreviewKeyDown="Window_PreviewKeyDown" Icon="mnt_icon.png" Loaded="Window_Loaded" PreviewDragOver="Window_PreviewDragOver">
     <Grid> 
         <Grid.RowDefinitions>
             <RowDefinition Height="auto"/>
@@ -14,22 +14,21 @@
         <Grid Grid.Row="0">
             <Menu VerticalAlignment="Top">
                 <MenuItem Header="ファイル" >
-                    <MenuItem Name="menuitemOpen" Header="開く"
-                              Command="ApplicationCommands.Open" />
+                    <MenuItem Name="menuitemOpen" Header="ファイル送信"
+                              Command="ApplicationCommands.Open"/>
                     <Separator />
                     <MenuItem Name="menuitemExit" Header="終了"
-                              Click="menuitemExit_Click" InputGestureText="Ctrl+X" />
+                              Click="MenuitemExit_Click" InputGestureText="Ctrl+X" />
                 </MenuItem>
                 <MenuItem Header="編集" >
                     <MenuItem Name="menuitemPaste" Header="貼り付け"
                               Command="ApplicationCommands.Paste"/>
                 </MenuItem>
-                <MenuItem x:Name="COM" Header="COM">
-                </MenuItem>
+                <MenuItem x:Name="KbdDev" Header="KbdDev"/>
             </Menu>
         </Grid>
         <Grid Grid.Row="1">
-            <TextBox x:Name="TB" TextWrapping="Wrap" FontFamily="MS Gothic" FontSize="72" TextChanged="TB_TextChanged"  />
+            <TextBox x:Name="TB" TextWrapping="Wrap" FontFamily="MS Gothic" FontSize="72" TextChanged="TB_TextChanged" Drop="TB_Drop"  />
         </Grid>
 
     </Grid>
