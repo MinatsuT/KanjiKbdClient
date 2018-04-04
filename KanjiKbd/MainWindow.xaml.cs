@@ -95,26 +95,33 @@ namespace KanjiKbd {
 
             // IMEの処理中でなければ送信する。
             if (key != Key.ImeProcessed) {
-                if (key == Key.System) {
-                    key = systemKey;
-                }
+                if (key == Key.A && false) {
+                    for (int i = 0; i < 0x86; i++) {
+                        if (i>=0x3a && i<=0x48) continue;
+                        Task t = kbd.SendAsync(KeyCode.MOD_LSHIFT, (byte)i, 20);
+                    }
+                } else {
+                    if (key == Key.System) {
+                        key = systemKey;
+                    }
 
-                byte code = (byte)KeyCode.KeyToCode(key);
-                ModifierKeys modKey = Keyboard.Modifiers;
-                byte mod = 0;
-                if ((modKey & ModifierKeys.Alt) != ModifierKeys.None) {
-                    mod |= KeyCode.MOD_LALT;
+                    byte code = (byte)KeyCode.KeyToCode(key);
+                    ModifierKeys modKey = Keyboard.Modifiers;
+                    byte mod = 0;
+                    if ((modKey & ModifierKeys.Alt) != ModifierKeys.None) {
+                        mod |= KeyCode.MOD_LALT;
+                    }
+                    if ((modKey & ModifierKeys.Control) != ModifierKeys.None) {
+                        mod |= KeyCode.MOD_LCTRL;
+                    }
+                    if ((modKey & ModifierKeys.Shift) != ModifierKeys.None) {
+                        mod |= KeyCode.MOD_LSHIFT;
+                    }
+                    if ((modKey & ModifierKeys.Windows) != ModifierKeys.None) {
+                        mod |= KeyCode.MOD_LWINDOWS;
+                    }
+                    Task t = kbd.SendAsync(mod, code, 20);
                 }
-                if ((modKey & ModifierKeys.Control) != ModifierKeys.None) {
-                    mod |= KeyCode.MOD_LCTRL;
-                }
-                if ((modKey & ModifierKeys.Shift) != ModifierKeys.None) {
-                    mod |= KeyCode.MOD_LSHIFT;
-                }
-                if ((modKey & ModifierKeys.Windows) != ModifierKeys.None) {
-                    mod |= KeyCode.MOD_LWINDOWS;
-                }
-                Task t = kbd.SendAsync(mod, code, 20);
                 e.Handled = true;
             }
         }
@@ -172,7 +179,7 @@ namespace KanjiKbd {
                     codes[i] = (byte)KeyCode.CharToCode(s[0]);
                     c <<= 4;
                 }
-                await kbd.SendCodesAsync(0,codes,1);
+                await kbd.SendAsync(0, codes, 1);
             }
 
             // 最後に、終了を示すスペースを送信。この時点でスマイルツールが終了する。
