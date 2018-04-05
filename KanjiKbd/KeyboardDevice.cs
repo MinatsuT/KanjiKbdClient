@@ -1,4 +1,5 @@
 ﻿using BitStreams;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -517,7 +518,7 @@ namespace KanjiKbd {
             await SendPktToDeviceAsync(2 + 6);
 
             //if (delay > 0) {
-                await Task.Delay(delay);
+            await Task.Delay(delay);
             //}
 
             for (int i = 2; i < 8; i++) {
@@ -631,7 +632,7 @@ namespace KanjiKbd {
         /// </summary>
         /// <param name="fname"></param>
         /// <returns></returns>
-        public async Task<long> SendFileAsync(string fname) {
+        public async Task<long> SendFileAsync_old(string fname) {
             FileSending = true;
             BinaryReader br = null;
             long fileSize = 0;
@@ -696,6 +697,59 @@ namespace KanjiKbd {
         }
 
         /// <summary>
+        /// 指定されたファイルを送信する。
+        /// </summary>
+        /// <param name="fname"></param>
+        /// <returns></returns>
+        public async Task<long> SendFileAsync(string fname) {
+            FileSending = true;
+            byte[] dat = System.IO.File.ReadAllBytes(fname);
+
+            FileInfo fi = new FileInfo(fname);
+
+            // ファイル名
+            string sendFname = "";
+            foreach (char c in fi.Name) {
+                // 多バイトコードは含めない
+                if (c < 0x7f) {
+                    sendFname += c;
+                }
+                if (sendFname.Length >= 14) break;
+            }
+
+
+            // ファイルの種別
+            var key = Registry.ClassesRoot.OpenSubKey(fi.Extension);
+            var mimeType = key?.GetValue("Content Type") as string;
+
+            string fileType = "dat";
+            if (mimeType != null) {
+                if (mimeType.StartsWith("text")) {
+                    // テキストファイル
+                    fileType = "txt";
+                    dat = UTF16Reader.GetBytes(fname);
+                } else if (mimeType.StartsWith("image")) {
+                    // 画像ファイル
+                    ImageReader ir = new ImageReader(fname);
+                    dat = ir.GetBytes();
+                    fileType = string.Format("grp{0}x{1}", ir.width, ir.height);
+                }
+            }
+
+            if (fileType == "dat") {
+                dat = System.IO.File.ReadAllBytes(fname);
+            }
+            long fileSize = dat.Length;
+
+            Console.WriteLine("File=[{0}] Type={1} Size={2}", sendFname, fileType, fileSize);
+
+            await SendDataAsync(dat, sendFname, fileType, fileSize);
+
+            FileSending = false;
+            return dat.Length;
+        }
+
+        /// <summary>
         /// 大文字小文字を逆転させる
         /// </summary>
         /// <param name="s"></param>
@@ -704,6 +758,53 @@ namespace KanjiKbd {
             return new string(s.Select(c => char.IsLetter(c) ? (char.IsUpper(c) ? char.ToLower(c) : char.ToUpper(c)) : c).ToArray());
         }
 
-    }
+        /// <summary>
+        /// バイトデータを送信する
+        /// </summary>
+        /// <param name="data"></param>
+        /// <param name="dataName"></param>
+        /// <param name="dataType"></param>
+        /// <param name="size"></param>
+        /// <returns></returns>
+        public async Task<long> SendDataAsync(byte[] data, string dataName, string dataType, long size) {
+            long sentSize = 0;
+            long dataSize = Math.Min(data.Length, size);
 
+            if (bs == null) {
+                bs = new BitStream(bitBuf);
+            }
+            InitToken();
+
+            // テータ名を送信
+            await _SendAsync(dataName);
+            await _SendAsync(KeyCode.KEY_ENTER);
+
+            // タイプを送信
+            await _SendAsync(dataType);
+            await _SendAsync(KeyCode.KEY_ENTER);
+
+            // サイズを送信
+            await _SendAsync(dataSize.ToString());
+            await _SendAsync(KeyCode.KEY_ENTER);
+
+            // データを送信
+            while (sentSize < dataSize) {
+                bs.Seek(0, 0);
+                for (int i = 0; i < maxBytesPerPkt; i++) {
+                    byte b = 0;
+                    if (sentSize < dataSize) {
+                        b = data[sentSize++];
+                    }
+                    bs.WriteByte(b);
+                }
+                await SendBitsAsync(maxBitsPerPkt);
+            }
+
+            // 終了マークを送信
+            await _SendAsync(endMark);
+            await _SendAsync(KeyCode.KEY_ENTER);
+            return sentSize;
+        }
+
+    }
 }

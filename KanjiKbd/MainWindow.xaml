@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:KanjiKbd"
         mc:Ignorable="d"
-        Title="プチコンBIG用漢字キーボードクライアント" Height="138.415" Width="1462.058" PreviewKeyDown="Window_PreviewKeyDown" Icon="mnt_icon.png" Loaded="Window_Loaded" PreviewDragOver="Window_PreviewDragOver">
+        Title="プチコンBIG用漢字キーボードクライアント" Height="138.415" Width="1462.058" PreviewKeyDown="Window_PreviewKeyDown" Icon="mnt_icon.png" Loaded="Window_Loaded" PreviewDragOver="Window_DragOver"  Drop="Window_Drop"  >
     <Grid> 
         <Grid.RowDefinitions>
             <RowDefinition Height="auto"/>
@@ -28,7 +28,7 @@
             </Menu>
         </Grid>
         <Grid Grid.Row="1">
-            <TextBox x:Name="TB" TextWrapping="Wrap" FontFamily="MS Gothic" FontSize="72" TextChanged="TB_TextChanged" Drop="TB_Drop"  />
+            <TextBox x:Name="TB" TextWrapping="Wrap" FontFamily="MS Gothic" FontSize="72" TextChanged="TB_TextChanged"/>
         </Grid>
 
     </Grid>

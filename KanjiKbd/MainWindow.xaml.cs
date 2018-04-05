@@ -215,7 +215,12 @@ namespace KanjiKbd {
             Console.WriteLine("デバイスさがすのしゅーりょー(´･ω･`)");
         }
 
-        private async void TB_Drop(object sender, DragEventArgs e) {
+        /// <summary>
+        /// ドロップされたファイルを送信する。
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private async void Window_Drop(object sender, DragEventArgs e) {
             string[] files = e.Data.GetData(DataFormats.FileDrop) as string[];
             if (files != null) {
                 foreach (var fname in files) {
@@ -225,11 +230,11 @@ namespace KanjiKbd {
         }
 
         /// <summary>
-        /// ドラッグされたファイルを送信する。
+        /// ドラッグされたファイルを受け入れる。
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void Window_PreviewDragOver(object sender, DragEventArgs e) {
+        private void Window_DragOver(object sender, DragEventArgs e) {
             if (e.Data.GetDataPresent(DataFormats.FileDrop, true)) {
                 e.Effects = DragDropEffects.Copy;
             } else {
