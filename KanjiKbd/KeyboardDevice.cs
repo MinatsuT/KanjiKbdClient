@@ -6,10 +6,12 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
+using System.Management;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -163,11 +165,18 @@ namespace KanjiKbd {
         /*****************************************************************
          * デバイス
          *****************************************************************/
+
+        public async Task FindAndAttach() {
+            Task findKeyboard = FindKeyboardDeviceAsync();
+            await Task.Delay(1000);
+            OpenLatest();
+            await findKeyboard;
+        }
+
         /// <summary>
         /// キーボードデバイスを探索する。
         /// </summary>
         public async Task FindKeyboardDeviceAsync() {
-            Console.WriteLine("キーボードを探す！");
             FindCOMPort();
             await FindKeyboardServerAsync();
         }
@@ -176,8 +185,9 @@ namespace KanjiKbd {
         /// 最後に追加されたデバイスをオープンする。
         /// </summary>
         public void OpenLatest() {
-            Console.WriteLine("OpenLatestが呼ばれた！");
-            Open(devices.Last().FriendlyName);
+            if (myPort == null && myClient == null && devices.Count > 0) {
+                Open(devices.Last().FriendlyName);
+            }
         }
 
         /// <summary>
@@ -224,9 +234,32 @@ namespace KanjiKbd {
         /// </summary>
         private void FindCOMPort() {
             foreach (var portName in SerialPort.GetPortNames()) {
-                AddDevice(new KeyboardDeviceInfo(portName, portName, KeyboardDeviceInfo.KeyboardDeviceType.COM));
+                var friendlyName = GetFriendlyNameFromCOM(portName);
+                if (friendlyName.StartsWith("KitProg")) {
+                    AddDevice(new KeyboardDeviceInfo(friendlyName, portName, KeyboardDeviceInfo.KeyboardDeviceType.COM));
+                }
             }
         }
+
+        /// <summary>
+        /// COMポートのフレンドリーネームを取得する
+        /// </summary>
+        /// <param name="portName"></param>
+        /// <returns></returns>
+        private static string GetFriendlyNameFromCOM(String portName) {
+            var comRegex = new Regex(@"\(" + portName + @"\)"); // デバイス名に"(COM3)"などが入ってるものを探したい
+
+            var pnpComs = new ManagementClass("Win32_PnPEntity")
+                .GetInstances() // 一覧を取得
+                .Cast<ManagementObject>()
+                .Select(managementObj => managementObj.GetPropertyValue("Name")) // 名前拾ってくる
+                .Where(nameObj => nameObj != null) // プロパティ値が拾えないものはnullになっているので弾く
+                .Select(nameObj => nameObj.ToString()) // 文字列に直し、
+                .Where(name => comRegex.IsMatch(name)); // 正規表現で最後のフィルタリング
+
+            return pnpComs.ElementAt(0);
+        }
+
 
         /// <summary>
         /// COMポートのオープン
@@ -245,7 +278,7 @@ namespace KanjiKbd {
             OnKeyboardDeviceConnected(new KeyboardDeviceEventArgs(kdi.FriendlyName));
 
             COMSendEnable = true;
-            Console.Out.WriteLine(String.Format("Open [{0}].", kdi.DeviceName));
+            Console.Out.WriteLine(String.Format("{0} をオープンしました。", kdi.FriendlyName));
         }
 
         /// <summary>
@@ -292,7 +325,8 @@ namespace KanjiKbd {
             };
 
             // メッセージ受信開始
-            Task listenMessage = ListenMessageAsync(client);
+            var cts = new CancellationTokenSource();
+            Task listenMessage = ListenMessageAsync(client, cts.Token);
 
             // 全てのブロードキャストアドレスにメッセージを送信
             var buf = Encoding.ASCII.GetBytes("");
@@ -301,11 +335,10 @@ namespace KanjiKbd {
             }
 
             // メッセージ受信タスクの終了待ち
-            // ５秒間だけ待ってやる！
-            await Task.Delay(5000);
-            client.Close();
+            await Task.Delay(2000);
+            cts.Cancel();
             await listenMessage;
-            Console.WriteLine("UDP受信タスクが終了したはず。");
+            client.Close();
         }
 
         /// <summary>
@@ -333,14 +366,12 @@ namespace KanjiKbd {
                         uint net = adr & msk;
                         if (net != multi) {
                             IPAddress broadcast = new IPAddress(adr | ~msk);
-                            Console.WriteLine("{0}/{1} {2}", addr.Address.ToString(), addr.IPv4Mask.ToString(), broadcast.ToString());
+                            Console.WriteLine("ネットワークインターフェース: {0}/{1} broadcast {2}", addr.Address.ToString(), addr.IPv4Mask.ToString(), broadcast.ToString());
                             broadcasts.Add(broadcast);
                         }
                     }
                 }
             }
-
-            Console.WriteLine("");
             return broadcasts;
         }
 
@@ -348,25 +379,31 @@ namespace KanjiKbd {
         /// キーボードサーバからの応答を受信し、キーボードサーバ情報を追加する。
         /// </summary>
         /// <param name="client"></param>
-        private async Task ListenMessageAsync(UdpClient client) {
+        private async Task ListenMessageAsync(UdpClient client, CancellationToken token) {
             try {
-                while (true) {
+                while (!token.IsCancellationRequested) {
                     // データ受信待機
-                    var result = await client.ReceiveAsync();
+                    var avail = client.Available;
+                    if (avail != 0) {
+                        var result = await client.ReceiveAsync();
 
-                    // キーボードサーバのIPアドレスを取得
-                    var address = result.RemoteEndPoint.Address.ToString();
+                        // キーボードサーバのIPアドレスを取得
+                        var address = result.RemoteEndPoint.Address.ToString();
 
-                    // 受信したデータを変換
-                    var hostname = Encoding.ASCII.GetString(result.Buffer);
+                        // 受信したデータを変換
+                        var hostname = Encoding.ASCII.GetString(result.Buffer);
 
-                    // Receive イベント を実行
-                    AddDevice(new KeyboardDeviceInfo(string.Format("{0}({1})", address.ToString(), hostname), address, KeyboardDeviceInfo.KeyboardDeviceType.SERVER));
-                    Console.WriteLine("Keyboard Server found: {0}({1})", address, hostname);
+                        // Receive イベント を実行
+                        AddDevice(new KeyboardDeviceInfo(string.Format("{0}({1})", address.ToString(), hostname), address, KeyboardDeviceInfo.KeyboardDeviceType.SERVER));
+                        Console.WriteLine("Keyboard Server found: {0}({1})", address, hostname);
+                    } else {
+                        await Task.Delay(500);
+                    }
                 }
-            } catch (Exception e) {
-                Console.WriteLine("ListenMessageAync 終了");
+            } catch (ObjectDisposedException e) {
+                //Console.WriteLine("ListenMessageAync 終了"+e);
             }
+            //Console.WriteLine("キーボードサーバからの応答待ちタスク終了。");
         }
 
         /// <summary>
@@ -379,7 +416,7 @@ namespace KanjiKbd {
             Task receive = ReceiveServer();
 
             OnKeyboardDeviceConnected(new KeyboardDeviceEventArgs(kdi.FriendlyName));
-            Console.Out.WriteLine(String.Format("Open [{0}].", kdi.DeviceName));
+            Console.Out.WriteLine(String.Format("{0} に接続しました。", kdi.FriendlyName));
         }
 
         /// <summary>
@@ -796,22 +833,10 @@ namespace KanjiKbd {
         }
 
         /// <summary>
-        /// 大文字小文字を逆転させる
-        /// </summary>
-        /// <param name="s"></param>
-        /// <returns></returns>
-        public static string reverseCase(string s) {
-            return new string(s.Select(c => char.IsLetter(c) ? (char.IsUpper(c) ? char.ToLower(c) : char.ToUpper(c)) : c).ToArray());
-        }
-
-        /// <summary>
         /// バイトデータを送信する
         /// </summary>
-        /// <param name="data"></param>
-        /// <param name="dataName"></param>
-        /// <param name="dataType"></param>
-        /// <param name="compSize"></param>
-        /// <param name="actualSize"></param>
+        /// <param name="p"></param>
+        /// <param name="token"></param>
         /// <returns></returns>
         public async Task<int> SendDataAsync(IProgress<TransferStatusInfo> p, CancellationToken token) {
             FileSending = true;
@@ -830,8 +855,8 @@ namespace KanjiKbd {
             }
             InitToken();
 
-            // ファイル名名を送信
-            await _SendAsync(fileName);
+            // ファイル名を送信
+            await _SendAsync(reverseCase(fileName));
             await _SendAsync(KeyCode.KEY_ENTER);
 
             // ファイルタイプを送信
@@ -876,5 +901,13 @@ namespace KanjiKbd {
             return sentSize;
         }
 
+        /// <summary>
+        /// 大文字小文字を逆転させる
+        /// </summary>
+        /// <param name="s"></param>
+        /// <returns></returns>
+        public static string reverseCase(string s) {
+            return new string(s.Select(c => char.IsLetter(c) ? (char.IsUpper(c) ? char.ToLower(c) : char.ToUpper(c)) : c).ToArray());
+        }
     }
 }

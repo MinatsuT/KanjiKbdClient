@@ -51,7 +51,7 @@ namespace KanjiKbd {
         /// <param name="sender"></param>
         /// <param name="e"></param>
         private void OnKeyboardDeviceFound(object sender, KeyboardDeviceEventArgs e) {
-            Console.WriteLine("{0}を見つけた。", e.FriendlyName);
+            Console.WriteLine("キーボードデバイス発見: {0}", e.FriendlyName);
             MenuItem m = new MenuItem {
                 Header = e.FriendlyName
             };
@@ -65,7 +65,6 @@ namespace KanjiKbd {
         /// <param name="sender"></param>
         /// <param name="e"></param>
         private void OnKeyboardDeviceConnected(object sender, KeyboardDeviceEventArgs e) {
-            Console.WriteLine("{0}に接続した。", e.FriendlyName);
             if (KbdDev.Dispatcher.CheckAccess()) {
                 KbdDev.Header = e.FriendlyName;
             } else {
@@ -202,18 +201,21 @@ namespace KanjiKbd {
         }
 
         /// <summary>
-        /// デバイスを探索し、１秒待って、最後に見つかったデバイスに自動接続する。
+        /// デバイスを検索
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private async void Window_Loaded(object sender, RoutedEventArgs e) {
-            Task findKeyboard = kbd.FindKeyboardDeviceAsync();
-            Console.WriteLine("デバイスさがすーヾ(*´∀｀*)ﾉ");
-            await Task.Delay(1000);
-            Console.WriteLine("デバイスに接続する～(ﾟ∀ﾟ)");
-            kbd.OpenLatest();
-            await findKeyboard;
-            Console.WriteLine("デバイスさがすのしゅーりょー(´･ω･`)");
+        private void Window_Loaded(object sender, RoutedEventArgs e) {
+            Task findKeyboard = kbd.FindAndAttach();
+        }
+
+        /// <summary>
+        /// デバイスを再検索
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void menuitemReScan_Click(object sender, RoutedEventArgs e) {
+            Task findKeyboard = kbd.FindAndAttach();
         }
 
         /// <summary>
@@ -348,5 +350,6 @@ namespace KanjiKbd {
                 await FileSendCommand(dialog.FileName);
             }
         }
+
     }
 }

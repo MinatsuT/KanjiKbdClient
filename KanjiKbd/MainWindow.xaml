@@ -28,7 +28,10 @@
                     <MenuItem Name="menuitemPaste" Header="貼り付け"
                               Click="menuitemPaste_Click"/>
                 </MenuItem>
-                <MenuItem x:Name="KbdDev" Header="KbdDev"/>
+                <MenuItem x:Name="KbdDev" Header="(未接続)">
+                    <MenuItem Name="menuitemReScan" Header="デバイスを再検索" Click="menuitemReScan_Click" />
+                    <Separator/>
+                </MenuItem>
             </Menu>
         </Grid>
         <Grid Grid.Row="1">
