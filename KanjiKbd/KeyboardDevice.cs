@@ -35,6 +35,16 @@ namespace KanjiKbd {
             : base(message, inner) {
         }
     }
+
+    public class TransferStatusInfo {
+        public string Mode { get; internal set; }
+        public string Fname { get; internal set; }
+        public int Min { get; internal set; }
+        public int Max { get; internal set; }
+        public int Value { get; internal set; }
+        public bool finished { get; internal set; } = false;
+    }
+
     class KeyboardDevice {
         private class KeyboardDeviceInfo {
             public enum KeyboardDeviceType { COM, SERVER };
@@ -81,6 +91,35 @@ namespace KanjiKbd {
         /// </summary>
         public bool FileSending { get; internal set; } = false;
 
+        /// <summary>
+        /// 転送ステータス
+        /// </summary>
+        private TransferStatusInfo transInfo = new TransferStatusInfo();
+
+        /// <summary>
+        /// 送信ファイル名
+        /// </summary>
+        private string fileName;
+
+        /// <summary>
+        /// 送信ファイル種別
+        /// </summary>
+        private string fileType;
+
+        /// <summary>
+        /// ファイル送信データ
+        /// </summary>
+        private byte[] fileData;
+
+        /// <summary>
+        /// 実データサイズ
+        /// </summary>
+        private int actualFileSize;
+
+        /// <summary>
+        /// 圧縮データサイズ
+        /// </summary>
+        private int compFileSize;
 
         /// <summary>
         /// コンストラクタ
@@ -360,6 +399,26 @@ namespace KanjiKbd {
             }
         }
 
+        /// <summary>
+        /// デバイスへ送信
+        /// </summary>
+        /// <param name="size"></param>
+        private async Task SendPktToDeviceAsync(int size) {
+            // COMポートへ送信
+            if (myPort != null) {
+                while (!COMSendEnable) {
+                    await Task.Delay(1);
+                }
+                myPort?.Write(pkt, 0, size);
+            }
+
+            // キーボードサーバへ送信
+            if (myClient != null) {
+                NetworkStream stream = myClient.GetStream();
+                stream.Write(pkt, 0, size);
+                stream.Flush();
+            }
+        }
 
         /*****************************************************************
          * キー送信
@@ -527,27 +586,6 @@ namespace KanjiKbd {
             await SendPktToDeviceAsync(2 + 6);
         }
 
-        /// <summary>
-        /// デバイスへ送信
-        /// </summary>
-        /// <param name="size"></param>
-        private async Task SendPktToDeviceAsync(int size) {
-            // COMポートへ送信
-            if (myPort != null) {
-                while (!COMSendEnable) {
-                    await Task.Delay(1);
-                }
-                myPort?.Write(pkt, 0, size);
-            }
-
-            // キーボードサーバへ送信
-            if (myClient != null) {
-                NetworkStream stream = myClient.GetStream();
-                stream.Write(pkt, 0, size);
-                stream.Flush();
-            }
-        }
-
 
         /*****************************************************************
          * ファイル送信
@@ -570,7 +608,6 @@ namespace KanjiKbd {
         /// </summary>
         private void InitToken() {
             string a = "0";
-            Console.WriteLine("0=" + (int)a[0]);
             for (int i = 0; i < 64; i++) {
                 char ch = tokenStr[i];
                 var code = KeyCode.CharToCode(ch);
@@ -623,7 +660,7 @@ namespace KanjiKbd {
             // 改行送信
             //pkt[1] = 0;
             pkt[2] = KeyCode.KEY_ENTER;
-            await SendPktAsync(1);
+            await SendPktAsync(0);
         }
 
 
@@ -696,33 +733,34 @@ namespace KanjiKbd {
             return fileSize;
         }
 
+
         /// <summary>
-        /// 指定されたファイルを送信する。
+        /// ファイル転送の準備をする。
         /// </summary>
         /// <param name="fname"></param>
+        /// <param name="p"></param>
+        /// <param name="token"></param>
         /// <returns></returns>
-        public async Task<long> SendFileAsync(string fname) {
-            FileSending = true;
+        public async Task<int> PrepareSendFileAsync(string fname, IProgress<TransferStatusInfo> p, CancellationToken token) {
             byte[] dat = System.IO.File.ReadAllBytes(fname);
 
             FileInfo fi = new FileInfo(fname);
 
             // ファイル名
-            string sendFname = "";
+            fileName = "";
             foreach (char c in fi.Name) {
                 // 多バイトコードは含めない
                 if (c < 0x7f) {
-                    sendFname += c;
+                    fileName += c;
                 }
-                if (sendFname.Length >= 14) break;
+                if (fileName.Length >= 14) break;
             }
-
 
             // ファイルの種別
             var key = Registry.ClassesRoot.OpenSubKey(fi.Extension);
             var mimeType = key?.GetValue("Content Type") as string;
 
-            string fileType = "dat";
+            fileType = "dat";
             if (mimeType != null) {
                 if (mimeType.StartsWith("text")) {
                     // テキストファイル
@@ -739,14 +777,22 @@ namespace KanjiKbd {
             if (fileType == "dat") {
                 dat = System.IO.File.ReadAllBytes(fname);
             }
-            long fileSize = dat.Length;
+            actualFileSize = dat.Length;
 
-            Console.WriteLine("File=[{0}] Type={1} Size={2}", sendFname, fileType, fileSize);
+            transInfo.Mode = "圧縮中";
+            transInfo.Fname = fileName;
+            transInfo.Min = 0;
+            transInfo.Max = actualFileSize;
+            transInfo.Value = 0;
+            transInfo.finished = false;
 
-            await SendDataAsync(dat, sendFname, fileType, fileSize);
+            Compress comp = new Compress(dat);
+            fileData = await Task.Run(() => comp.GetCompressedData(p, token, transInfo));
+            compFileSize = fileData.Length;
 
-            FileSending = false;
-            return dat.Length;
+            Console.WriteLine("File=[{0}] Type={1} compSize={2} actualSize={3}", fileName, fileType, compFileSize, actualFileSize);
+
+            return compFileSize;
         }
 
         /// <summary>
@@ -764,27 +810,40 @@ namespace KanjiKbd {
         /// <param name="data"></param>
         /// <param name="dataName"></param>
         /// <param name="dataType"></param>
-        /// <param name="size"></param>
+        /// <param name="compSize"></param>
+        /// <param name="actualSize"></param>
         /// <returns></returns>
-        public async Task<long> SendDataAsync(byte[] data, string dataName, string dataType, long size) {
-            long sentSize = 0;
-            long dataSize = Math.Min(data.Length, size);
+        public async Task<int> SendDataAsync(IProgress<TransferStatusInfo> p, CancellationToken token) {
+            FileSending = true;
+
+            transInfo.Mode = "転送中";
+            transInfo.Max = fileData.Length;
+            transInfo.Value = 0;
+            p.Report(transInfo);
+
+
+            int sentSize = 0;
+            int dataSize = Math.Min(fileData.Length, compFileSize);
 
             if (bs == null) {
                 bs = new BitStream(bitBuf);
             }
             InitToken();
 
-            // テータ名を送信
-            await _SendAsync(dataName);
+            // ファイル名名を送信
+            await _SendAsync(fileName);
             await _SendAsync(KeyCode.KEY_ENTER);
 
-            // タイプを送信
-            await _SendAsync(dataType);
+            // ファイルタイプを送信
+            await _SendAsync(fileType);
             await _SendAsync(KeyCode.KEY_ENTER);
 
-            // サイズを送信
+            // 圧縮データの送信サイズを送信
             await _SendAsync(dataSize.ToString());
+            await _SendAsync(KeyCode.KEY_ENTER);
+
+            // 圧縮前のデータのサイズを送信
+            await _SendAsync(actualFileSize.ToString());
             await _SendAsync(KeyCode.KEY_ENTER);
 
             // データを送信
@@ -793,16 +852,27 @@ namespace KanjiKbd {
                 for (int i = 0; i < maxBytesPerPkt; i++) {
                     byte b = 0;
                     if (sentSize < dataSize) {
-                        b = data[sentSize++];
+                        b = fileData[sentSize++];
                     }
                     bs.WriteByte(b);
                 }
                 await SendBitsAsync(maxBitsPerPkt);
+                transInfo.Value = sentSize;
+                p.Report(transInfo);
+                if (token.IsCancellationRequested) {
+                    Console.WriteLine("DummyWork: キャンセルリクエスト受信");
+                    break;
+                }
             }
 
             // 終了マークを送信
             await _SendAsync(endMark);
             await _SendAsync(KeyCode.KEY_ENTER);
+
+            transInfo.finished = true;
+            p.Report(transInfo);
+
+            FileSending = false;
             return sentSize;
         }
 

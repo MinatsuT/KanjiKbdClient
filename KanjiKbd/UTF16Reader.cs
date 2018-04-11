@@ -6,13 +6,22 @@ using System.Threading.Tasks;
 
 namespace KanjiKbd {
     class UTF16Reader {
-        public static  byte[] GetBytes(string fname) {
+        public static byte[] GetBytes(string fname) {
             //テキストファイルを開く
             byte[] bs = System.IO.File.ReadAllBytes(fname);
             //文字コードを取得する
             Encoding enc = GetCode(bs);
-            //デコードしてUTF16に変換する
-            return Encoding.Unicode.GetBytes(enc.GetString(bs));
+            //デコードしてUTF16(BOM無し)に変換する
+            byte[] bytes = Encoding.Unicode.GetBytes(enc.GetChars(bs));
+            if (bytes[0] == 0xff && bytes[1] == 0xfe) {
+                byte[] b = new byte[bytes.Length - 2];
+                for (int i = 0; i < bytes.Length - 2; i++) {
+                    b[i] = bytes[2 + i];
+                }
+                return b;
+
+            }
+            return bytes;
         }
 
         /// <summary>
@@ -53,7 +62,7 @@ namespace KanjiKbd {
                     isBinary = true;
                     if (b1 == 0x00 && i < len - 1 && bytes[i + 1] <= 0x7F) {
                         //smells like raw unicode
-                        return System.Text.Encoding.Unicode;
+                        return new UnicodeEncoding(false, false, false);
                     }
                 }
             }
@@ -179,7 +188,7 @@ namespace KanjiKbd {
                 return System.Text.Encoding.GetEncoding(932);
             } else if (utf8 > euc && utf8 > sjis) {
                 //UTF8
-                return System.Text.Encoding.UTF8;
+                return new UTF8Encoding(false, false);
             }
 
             return null;

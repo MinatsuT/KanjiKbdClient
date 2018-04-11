@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO.Ports;
@@ -97,7 +98,7 @@ namespace KanjiKbd {
             if (key != Key.ImeProcessed) {
                 if (key == Key.A && false) {
                     for (int i = 0; i < 0x86; i++) {
-                        if (i>=0x3a && i<=0x48) continue;
+                        if (i >= 0x3a && i <= 0x48) continue;
                         Task t = kbd.SendAsync(KeyCode.MOD_LSHIFT, (byte)i, 20);
                     }
                 } else {
@@ -220,13 +221,93 @@ namespace KanjiKbd {
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private async void Window_Drop(object sender, DragEventArgs e) {
+        private void Window_Drop(object sender, DragEventArgs e) {
             string[] files = e.Data.GetData(DataFormats.FileDrop) as string[];
-            if (files != null) {
-                foreach (var fname in files) {
-                    await kbd.SendFileAsync(fname);
-                }
+            Task.Run(() => {
+                Dispatcher.Invoke(async () => {
+                    if (files != null) {
+                        if (files.Length == 1) {
+                            await FileSendCommand(files[0]);
+                        } else {
+                            Topmost = true;
+                            MessageBox.Show(this, "複数のファイルを同時に送信することはできません。", this.Title, MessageBoxButton.OK, MessageBoxImage.Information);
+                            Topmost = false;
+                        }
+                    }
+                });
+            });
+        }
+
+        /// <summary>
+        /// ファイル送信コマンド
+        /// </summary>
+        /// <param name="fname"></param>
+        /// <returns></returns>
+        private async Task FileSendCommand(string fname) {
+            // キャンセルトークン生成
+            var tokenSource = new CancellationTokenSource();
+            var token = tokenSource.Token;
+
+            // ダイアログ生成
+            TransferStatusDialog transDialog = new TransferStatusDialog(tokenSource);
+            Progress<TransferStatusInfo> p = new Progress<TransferStatusInfo>(transDialog.OnUpadte);
+
+            // ファイル送信タスクを作成・開始
+            var fileSendTask = FileSend(fname, p, token);
+
+            // ダイアログ表示
+            Console.WriteLine("MainWindow: ダイアログ表示");
+            transDialog.ShowDialog();
+            Console.WriteLine("MainWindow: ダイアログ終了");
+
+            //// ファイル転送タスク終了待ち
+            var ret = await fileSendTask;
+            Console.WriteLine("MainWindow: ファイル転送タスク終了（戻り値={0}）", ret);
+
+            tokenSource.Dispose();
+
+            // 画面が切り替わるのを少し待つ
+            await Task.Delay(100);
+        }
+
+        /// <summary>
+        /// ファイル送信タスク
+        /// </summary>
+        /// <param name="fname"></param>
+        /// <param name="p"></param>
+        /// <param name="token"></param>
+        /// <returns></returns>
+        private async Task<int> FileSend(string fname, Progress<TransferStatusInfo> p, CancellationToken token) {
+            // ファイル転送準備（圧縮）タスクを生成・開始
+            var prepareTask = kbd.PrepareSendFileAsync(fname, p, token);
+
+            // F11を送信してスマイルツールを起動
+            await kbd.SendAsync(Key.F11);
+            Console.WriteLine("スマイルツール起動");
+
+            // 初回の起動に時間がかかる場合があるので、長めに待つ
+            await Task.Delay(2000);
+
+            // ファイル転送準備が終わるのを待つ
+            var prepareRet = await prepareTask;
+            Console.WriteLine("MainWindow: ファイル圧縮タスク終了（戻り値={0}）", prepareRet);
+
+            if (token.IsCancellationRequested) {
+                // スペースを送信してSmileToolを終了
+                await kbd.SendAsync(Key.Space);
+                return -1;
             }
+
+            // "0000"を送信して、ファイル転送モードへ移行
+            byte[] codes = new byte[4];
+            for (int i = 0; i < 4; i++) codes[i] = (byte)KeyCode.CharToCode('0');
+            await kbd.SendAsync(0, codes, 1);
+
+            //// ファイル転送タスクを生成・開始
+            Console.WriteLine("MainWindow: ファイル転送スタート");
+            var sendSize = await kbd.SendDataAsync(p, token);
+
+            return sendSize;
         }
 
         /// <summary>
@@ -252,6 +333,20 @@ namespace KanjiKbd {
             TB.IsEnabled = false;
             await SendKanjiAsync(Clipboard.GetText());
             TB.IsEnabled = true;
+        }
+
+        /// <summary>
+        /// ファイルオープン
+        /// </summary>
+        /// <param name="target"></param>
+        /// <param name="e"></param>
+        private async void OpenCmdExecuted(object target, ExecutedRoutedEventArgs e) {
+            var dialog = new OpenFileDialog();
+            dialog.Title = "ファイルを開く";
+            dialog.Filter = "全てのファイル(*.*)|*.*";
+            if (dialog.ShowDialog() == true) {
+                await FileSendCommand(dialog.FileName);
+            }
         }
     }
 }
