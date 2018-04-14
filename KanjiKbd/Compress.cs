@@ -13,7 +13,7 @@ namespace KanjiKbd {
         private const int minMatch = 3;
         private const int maxPos = 0xffff;
         private const int maxLen = 0xff;
-        private const int memlevel = 8;
+        private const int memlevel = 17;
         private const int hashBits = memlevel + 7;
         private const int hashSize = 1 << hashBits;
         private const int hashMask = hashSize - 1;
@@ -34,7 +34,7 @@ namespace KanjiKbd {
             }
 
             hashHead = new List<int>[hashSize];
-            hashHist = new int[hashSize];
+            hashHist = new int[(maxPos+1)];
             hashHistPtr = 0;
             curHash = 0;
 
@@ -115,18 +115,20 @@ namespace KanjiKbd {
             }
 
             // ハッシュ更新
-            curHash = ((curHash << hashShift) ^ buf[curPtr + minMatch - 1]) & hashMask;
+            byte bb = buf[curPtr + minMatch - 1];
+            curHash = ((curHash << hashShift) ^ bb) & hashMask;
 
             if (curPtr >= 0) {
                 if (hashHead[curHash] == null) {
                     hashHead[curHash] = new List<int>();
                 }
-                hashHead[curHash].Insert(0, curPtr);
+                //hashHead[curHash].Insert(0, curPtr);
+                hashHead[curHash].Add(curPtr);
                 hashHist[hashHistPtr++] = curHash;
-                hashHistPtr %= hashSize;
-                if (curPtr >= hashSize) {
+                hashHistPtr %= (maxPos + 1);
+                if (curPtr >= (maxPos + 1)) {
                     int oldestHash = hashHist[hashHistPtr];
-                    hashHead[oldestHash].RemoveAt(hashHead[oldestHash].Count - 1);
+                    hashHead[oldestHash].RemoveAt(0);
                 }
             }
         }
@@ -148,6 +150,7 @@ namespace KanjiKbd {
                     pos = tgt;
                     len = matchLen;
                 }
+                if (len >= maxLen) break;
             }
             return (len > 0);
         }
