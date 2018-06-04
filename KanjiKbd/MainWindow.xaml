@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:KanjiKbd"
         mc:Ignorable="d"
-        Title="プチコンBIG用漢字キーボードクライアント" Height="138.415" Width="1462.058" PreviewKeyDown="Window_PreviewKeyDown" Icon="mnt_icon.png" Loaded="Window_Loaded" PreviewDragOver="Window_DragOver"  Drop="Window_Drop"  >
+        Title="プチコンBIG用漢字キーボードクライアント" Height="138.415" Width="1462.058" Icon="mnt_icon.png" Loaded="Window_Loaded" PreviewDragOver="Window_DragOver"  Drop="Window_Drop" PreviewKeyDown="Window_PreviewKeyDown" KeyUp="Window_KeyUp"  >
     <Window.CommandBindings>
         <CommandBinding Command="ApplicationCommands.Open"                     
                         Executed="OpenCmdExecuted" />
