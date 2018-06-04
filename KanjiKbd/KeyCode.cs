@@ -107,6 +107,20 @@ namespace KanjiKbd {
             // Num0(0x62)
             keyToScanCode[(int)Key.NumPad0] = 0x62;
 
+            // Num.(0x63)
+            keyToScanCode[(int)Key.Decimal] = 0x63;
+
+            // CAPS
+            keyToScanCode[(int)Key.OemAttn] = 0x39;
+
+            // Menu
+            keyToScanCode[(int)Key.Apps] = 0x65;
+
+            // IME Convert
+            keyToScanCode[(int)Key.ImeConvert] = 0x8A;
+
+            // IME Non-Convert
+            keyToScanCode[(int)Key.ImeNonConvert] = 0x8B;
         }
     }
 }
