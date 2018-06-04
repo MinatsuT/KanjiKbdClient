@@ -85,6 +85,16 @@ namespace KanjiKbd {
         }
 
         /// <summary>
+        /// KeyUpハンドラ(PrintScreen用)
+        /// </summary>
+        private void Window_KeyUp(object sender, KeyEventArgs e) {
+            Key key = e.Key;
+            if (key==Key.Snapshot) {
+                Window_PreviewKeyDown(sender, e);
+            }
+        }
+
+        /// <summary>
         /// 入力されたキーを送信する。
         /// </summary>
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e) {

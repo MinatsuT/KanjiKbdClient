@@ -121,6 +121,9 @@ namespace KanjiKbd {
 
             // IME Non-Convert
             keyToScanCode[(int)Key.ImeNonConvert] = 0x8B;
+
+            // PrintScreen
+            keyToScanCode[(int)Key.Snapshot] = 0x46;
         }
     }
 }
